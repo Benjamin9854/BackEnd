@@ -18,6 +18,7 @@ from myapi.app import (
     agregar_saldo_usuario,
     comprar_numeros,
     mostrar_usuarios,
+    compra_individual,
 )
 
 from myapi.models import (
@@ -54,16 +55,16 @@ async def update_usuario(id: int, nombre: Optional[str] = None, clave: Optional[
         usuario = resultado.first()
     
     if usuario == None:
-        return "INGRESE UN ID DE USUARIO"
+        return "message: INGRESE UN ID DE USUARIO"
     if nombre == None:
         if clave == None:
-            return "NO HAY CAMBIOS"
+            return "message: NO HAY CAMBIOS"
         else:
-            return "NUEVA CLAVE: " + modificar_clave_usuario(clave, id)
+            return "message: NUEVA CLAVE --> " + modificar_clave_usuario(clave, id)
     if clave == None:
-        return "NUEVO NOMBRE: " + modificar_nombre_usuario(nombre, id)
+        return "message: NUEVO NOMBRE --> " + modificar_nombre_usuario(nombre, id)
     else:
-        return "NUEVO NOMBRE: " + modificar_nombre_usuario(nombre, id) + "      NUEVA CLAVE: " + modificar_clave_usuario(clave, id)
+        return "message: NUEVO NOMBRE --> " + modificar_nombre_usuario(nombre, id) + "    NUEVA CLAVE --> " + modificar_clave_usuario(clave, id)
 
 
 @router.delete("/Deshabilitar-Usuario/{id}", response_model=str)
@@ -109,11 +110,6 @@ async def premios_rif(rifa_id: int):
     return mostrar_premios(rifa_id)
 
 
-@router.post("/Cerrar-la-Rifa/", response_model=str)
-async def close_rif(id: int):
-    cerrado = cerrar_rifa(id)
-    return cerrado
-
 
 @router.post("/Sortear-la-Rifa/", response_model=list)
 async def sort_rif(id: int):
@@ -127,9 +123,17 @@ async def saldo(id: int, saldo: int):
     return "Ahora tiene un saldo de " + agregado
 
 
-@router.post("/Comprar-Numeros/", response_model=list)
+@router.post("/Comprar-Numero/", response_model=list)
+async def buy_numero(id_rifa: int, nombre: str, numero: int):
+    comprados = compra_individual(id_rifa, nombre, numero)
+    cerrar_rifa(id_rifa)
+    return comprados
+
+
+@router.post("/Comprar-Multiples-Numeros/", response_model=list)
 async def buy_numeros(id_rifa: int, nombre: str, cantidad_comprar: int):
     comprados = comprar_numeros(id_rifa, nombre, cantidad_comprar)
+    cerrar_rifa(id_rifa)
     return comprados
 
 

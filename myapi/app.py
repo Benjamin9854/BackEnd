@@ -22,12 +22,17 @@ def create_usuario(usu: UsuarioCreate):
     usu_1 = Usuario(nombre=usu.c_nombre, clave=usu.c_clave, saldo=10000)
 
     with Session(engine) as session:
-        session.add(usu_1)  #guarda el registro en la "session"
-        session.commit()    #guarda los datos en la database
-        session.refresh(usu_1)
-        usu.c_nombre = usu_1.nombre
-        usu.c_clave = usu_1.clave
-        return usu
+        seleccion = select(Usuario).where(Usuario.nombre == usu_1.nombre)         #Esto es para ver si no hay un usuario con el mismo nombre
+        resultado = session.exec(seleccion)
+        usu = resultado.first()       #con esto se guarda, en "usuario", el primer registro encontrado
+
+        if usu == None:
+            session.add(usu_1)  #guarda el registro en la "session"
+            session.commit()    #guarda los datos en la database
+            session.refresh(usu_1)
+            usu.c_nombre = usu_1.nombre
+            usu.c_clave = usu_1.clave
+            return usu
 
 
 
@@ -165,7 +170,7 @@ def eliminar_usuario(usu_id: int):
         resultado = session.exec(seleccion)
         usuario = resultado.first()
         if usuario == None:
-            return "ID DE USUARIO INVALIDO"
+            return "message: ID DE USUARIO INVALIDO"
 
 
         seleccion = select(Rifas).where(Rifas.id_usuario == usu_id)
@@ -178,7 +183,7 @@ def eliminar_usuario(usu_id: int):
         session.delete(usuario)         #se elimina el usuario
         session.commit()                #se modifica la database
 
-        return usuario.nombre
+        return ("message: " + usuario.nombre + " ha sido deshabilitado")
         #el objeto "usuario" aun se puede usar para su retorno
 
 
@@ -191,14 +196,15 @@ def cerrar_rifa(rifa_id: int):
         resultado = session.exec(seleccion)
 
         rifa = resultado.first()
-        lista_estados = rifa.estado_numero.split(" ")
-        for i in lista_estados:
-            if i == 'Comprar':
-                return 'NO SE HAN COMPRADO TODOS LOS NUMEROS'
-        rifa.estado = "Cerrada"
-        session.add(rifa)
-        session.commit()
-        return rifa.estado
+        if rifa != None:
+            lista_estados = rifa.estado_numero.split(" ")
+            for i in lista_estados:
+                if i == 'Comprar':
+                    return 'message: NO SE HAN COMPRADO TODOS LOS NUMEROS'
+            rifa.estado = "Cerrada"
+            session.add(rifa)
+            session.commit()
+            return rifa.estado
 
 
 
@@ -256,6 +262,51 @@ def agregar_saldo_usuario(usu_id: int, re_saldo: int):
 
 
 
+
+def compra_individual(rif_id: int, usu_nombre: str, numero: int):
+    with Session(engine) as session:
+        seleccion = select(Rifas).where(Rifas.id == rif_id)
+        resultado = session.exec(seleccion)
+        rifa = resultado.first()
+        seleccion = select(Usuario).where(Usuario.nombre == usu_nombre)
+        resultado = session.exec(seleccion)
+        usu = resultado.first()
+        error = list()
+
+        if rifa == None:
+            error.append("message: INGRESE UNA RIFA VALIDA")
+            return error
+        if rifa.estado == 'Cerrada':
+            error.append("message: ESTA RIFA ESTA CERRADA")
+            return error
+        if rifa.estado == 'Sorteada':
+            error.append("message: ESTA RIFA YA HA SIDO SORTEADA")
+            return error
+        if usu == None:
+            error.append("message: INGRESE SU NOMBRE DE USUARIO")
+            return error
+        
+
+        lista_estados = rifa.estado_numero.split(" ")
+        
+
+        if numero >= len(lista_estados):         #SE COMPRUEBA QUE EL NUMERO ELEGIDO SEA VALIDO
+            error.append("message: EL NUMERO A COMPRAR NO EXISTE EN ESTA RIFA")
+            return error
+        if lista_estados[numero] != 'Comprar':
+            error.append("message: EL NUMERO QUE DESEA COMPRAR YA HA SIDO VENDIDO")
+            return error
+        else:
+            lista_estados[numero] = usu_nombre   #EL ESTADO DEL NUMERO SE CAMBIA POR EL NOMBRE DEL USUARIO QUE LO COMPRO
+            usu.saldo -= rifa.precio
+            rifa.estado_numero = " "
+            rifa.estado_numero = rifa.estado_numero.join(lista_estados)
+            session.add(rifa)
+            session.commit()
+            return lista_estados
+
+
+
 def comprar_numeros(rif_id: int, usu_nombre: str, numeros: int):
     with Session(engine) as session:
         seleccion = select(Rifas).where(Rifas.id == rif_id)
@@ -267,16 +318,16 @@ def comprar_numeros(rif_id: int, usu_nombre: str, numeros: int):
         error = list()
 
         if rifa == None:
-            error.append("INGRESE UNA RIFA VALIDA")
+            error.append("message: INGRESE UNA RIFA VALIDA")
             return error
         if rifa.estado == 'Cerrada':
-            error.append("ESTA RIFA ESTA CERRADA")
+            error.append("message: ESTA RIFA ESTA CERRADA")
             return error
         if rifa.estado == 'Sorteada':
-            error.append("ESTA RIFA YA HA SIDO SORTEADA")
+            error.append("message: ESTA RIFA YA HA SIDO SORTEADA")
             return error
         if usu == None:
-            error.append("INGRESE SU NOMBRE DE USUARIO")
+            error.append("message: INGRESE SU NOMBRE DE USUARIO")
             return error
         
 
@@ -304,7 +355,7 @@ def comprar_numeros(rif_id: int, usu_nombre: str, numeros: int):
             return lista_estados
         else:
             mensaje = list()
-            mensaje.append("CANTIDAD DE NUMEROS INVALIDA    MAX: " + str(x))
+            mensaje.append("message: CANTIDAD DE NUMEROS INVALIDA    MAX-->" + str(x))
             return mensaje
 
 
@@ -313,12 +364,16 @@ def comprar_numeros(rif_id: int, usu_nombre: str, numeros: int):
 #PARA CUANDO EL PROPIETARIO DECIDA SORTEAR LA RIFA
 def sortear_rifa(rif_id: int):
     with Session(engine) as session:
-
+        mensaje = list()
         seleccion = select(Rifas).where(Rifas.id == rif_id)
         resultado = session.exec(seleccion)
         rifa = resultado.first()
-        mensaje = list()
-        mensaje.append('LA RIFA SIGUE ABIERTA')
+
+        if rifa == None:
+            mensaje.append('message: EL ID ES INVALIDO')
+            return mensaje
+
+
         if rifa.estado == 'Cerrada':
             lista_estados = rifa.estado_numero.split(" ")
             lista_premios = rifa.premios.split(" ")
@@ -352,7 +407,9 @@ def sortear_rifa(rif_id: int):
 
             x=0
             for i in ganadores:
-                lista_premios[x] += (": " + str(i) + "    ")
+                lista_premios[x] += ("-->" + str(i))
+                if x != (len(ganadores)-1):
+                    lista_premios[x] += (" ")
                 x += 1
 
             rifa.premios = " "
@@ -362,4 +419,5 @@ def sortear_rifa(rif_id: int):
             session.commit()
             return lista_premios
         else:
+            mensaje.append('message: LA RIFA SIGUE ABIERTA')
             return mensaje
